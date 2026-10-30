@@ -15,6 +15,17 @@ Research findings (October 2026):
 
 If you own a Galaxy S26, try the built-in option first. For **every other Samsung**, SuperAirDrop gives you the same tap-a-device experience.
 
+## The APK (easiest)
+
+1. On the Samsung, download **[SuperAirDrop.apk](https://github.com/jkassen18-del/SuperAirDrop/releases/download/apk-latest/SuperAirDrop.apk)** and open it. Allow "Install unknown apps" for your browser when asked.
+2. Open SuperAirDrop. It shows a **QR code**.
+3. On the iPhone, point the **Camera** at the QR code and tap the link. Safari opens; nothing to install on the iPhone.
+4. Tap the other phone's bubble to send. Or, on the Samsung, use **Share → SuperAirDrop** from Gallery, My Files, etc., then tap the iPhone.
+
+Both phones must be on the same Wi-Fi, **or** turn on the Samsung's hotspot and connect the iPhone to it (works with no router or internet). Files the Samsung receives go to `Downloads/SuperAirDrop`. On the iPhone, tap **Download** on a received file, then save it from the Downloads list in Safari / the Files app.
+
+The APK is built by GitHub Actions on every push (`.github/workflows/android.yml`) and runs the whole server on the Samsung (`android/`, a Java port of `server.js`) with the same web app bundled inside.
+
 ## What it does to avoid losing files
 
 - **Checksummed chunks** — every 64 KB piece carries a CRC-32; corrupted pieces are thrown away and re-requested.
