@@ -1,0 +1,17 @@
+{
+  "name": "superairdrop",
+  "version": "0.1.0",
+  "description": "AirDrop-style file sharing between Samsung/Android and iPhone in the browser, with resumable, checksum-verified transfers.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.mjs",
+    "cert": "mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj '/CN=superairdrop.local' -keyout certs/key.pem -out certs/cert.pem",
+    "test:e2e": "node test/e2e.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "SuperAirDrop",
+  "short_name": "SuperAirDrop",
+  "description": "Send files between Samsung, Android and iPhone without losing them.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#0b84ff",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

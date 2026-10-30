@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b84ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SuperAirDrop">
+  <title>SuperAirDrop</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> SuperAirDrop</div>
+    <span id="status" class="pill">Connecting…</span>
+  </header>
+
+  <main>
+    <section class="me">
+      <p>You appear as <button id="my-name" class="link" title="Rename this device"></button></p>
+      <p class="hint">Open this page on both phones while they are on the same Wi-Fi. Tap a device to send files.</p>
+    </section>
+
+    <section id="peers" class="peers" aria-live="polite"></section>
+    <p id="no-peers" class="empty">Looking for nearby devices…<br><span class="hint">Not on the same Wi-Fi? Use <b>Pair with code</b>.</span></p>
+
+    <div class="actions">
+      <button id="pair" class="secondary">Pair with code</button>
+    </div>
+
+    <section>
+      <h2>Transfers</h2>
+      <ul id="transfers" class="list"></ul>
+      <p id="no-transfers" class="empty small">Nothing in progress.</p>
+    </section>
+
+    <section>
+      <h2>Received files</h2>
+      <p class="hint">Received files are kept here until you delete them, so a failed save never loses anything.<span id="storage-warning"></span></p>
+      <div class="actions"><button id="save-all" class="secondary" hidden>Save all</button></div>
+      <ul id="inbox" class="list"></ul>
+      <p id="no-files" class="empty small">No files yet.</p>
+    </section>
+  </main>
+
+  <input id="file-input" type="file" multiple hidden>
+
+  <dialog id="offer-dialog">
+    <form method="dialog">
+      <h3 id="offer-title"></h3>
+      <ul id="offer-files" class="offer-files"></ul>
+      <menu>
+        <button value="decline" class="secondary">Decline</button>
+        <button value="accept" class="primary" autofocus>Accept</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="pair-dialog">
+    <form method="dialog">
+      <h3>Pair with code</h3>
+      <p>On the other phone, enter this code:</p>
+      <p id="my-code" class="code"></p>
+      <p>Or enter the code shown on the other phone:</p>
+      <input id="code-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autocomplete="off">
+      <menu>
+        <button value="close" class="secondary">Close</button>
+        <button value="join" class="primary">Pair</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="js/app.mjs"></script>
+</body>
+</html>
