@@ -2,6 +2,10 @@ import { randomId } from './protocol.mjs';
 import { TransferEngine } from './engine.mjs';
 import { openStorage } from './storage.mjs';
 import { Link } from './link.mjs';
+import { qrSvg } from './qr.mjs';
+
+// Present when running inside the Android app (see android/).
+const android = globalThis.SuperAirDropAndroid;
 
 const $ = (id) => document.getElementById(id);
 
@@ -154,6 +158,13 @@ function renderPeers() {
 }
 
 function choose(peerId) {
+  if (sharedFiles.length) {
+    send(peerId, sharedFiles);
+    sharedFiles = [];
+    android?.clearSharedFiles();
+    updateSharedBanner();
+    return;
+  }
   targetPeer = peerId;
   $('file-input').value = '';
   $('file-input').click();
@@ -277,7 +288,23 @@ function urlFor(record) {
   return objectUrls.get(record.id);
 }
 
+async function saveOnAndroid(record) {
+  const id = android.beginSave(record.name, record.type);
+  if (id < 0) return toast(`Could not save ${record.name}`);
+  const PIECE = 512 * 1024;
+  let ok = true;
+  for (let from = 0; ok && from < record.blob.size; from += PIECE) {
+    const bytes = new Uint8Array(await record.blob.slice(from, from + PIECE).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    ok = android.appendSave(id, btoa(bin));
+  }
+  ok = android.finishSave(id, ok) && ok;
+  toast(ok ? `Saved ${record.name} to Downloads/SuperAirDrop` : `Could not save ${record.name}`);
+}
+
 function download(record) {
+  if (android) return saveOnAndroid(record);
   const a = el('a', { href: urlFor(record), download: record.name });
   document.body.append(a);
   a.click();
@@ -350,8 +377,45 @@ $('save-all').addEventListener('click', async () => {
       if (err.name === 'AbortError') return;
     }
   }
-  for (const r of records) download(r);
+  for (const r of records) await download(r);
 });
+
+// ---- Android app: invite the iPhone, files from the share sheet --------------
+
+let sharedFiles = [];
+
+function updateSharedBanner() {
+  const banner = $('shared-banner');
+  banner.hidden = sharedFiles.length === 0;
+  const n = sharedFiles.length;
+  banner.textContent = `Tap a device to send ${n === 1 ? sharedFiles[0].name : `${n} files`}`;
+}
+
+async function loadSharedFiles() {
+  const list = JSON.parse(android.takeSharedFiles());
+  if (!list.length) return;
+  try {
+    sharedFiles = await Promise.all(
+      list.map(async (f) => new File([await (await fetch(f.url)).blob()], f.name, { type: f.type })),
+    );
+  } catch {
+    toast('Could not open the shared files');
+  }
+  updateSharedBanner();
+}
+
+if (android) {
+  const url = android.getShareUrl();
+  if (url) {
+    $('invite-qr').innerHTML = qrSvg(url);
+    $('invite-url').textContent = url.replace(/^http:\/\//, '').replace(/\/$/, '');
+    $('invite').hidden = false;
+  } else {
+    toast('Connect to Wi-Fi or turn on your hotspot so the iPhone can reach this phone');
+  }
+  window.addEventListener('android-shared', loadSharedFiles);
+  loadSharedFiles();
+}
 
 renderInbox();
 renderPeers();

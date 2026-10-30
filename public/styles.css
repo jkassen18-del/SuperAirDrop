@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root {
   --bg: #f5f6fa;
   --card: #ffffff;
@@ -111,3 +112,11 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
   max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 12px;
   background: var(--text); color: var(--bg); font-size: 14px; box-shadow: 0 4px 20px rgb(0 0 0 / .25); z-index: 10;
 }
+
+.invite { display: flex; gap: 16px; align-items: center; background: var(--card); border-radius: 18px; padding: 14px; margin-top: 16px; box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+.invite p { margin: 4px 0; }
+.qr { flex: none; width: 132px; height: 132px; border-radius: 10px; overflow: hidden; background: #fff; }
+.qr svg { display: block; width: 100%; height: 100%; }
+.invite-url { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; color: var(--accent); }
+.banner { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--text); border-radius: 12px; padding: 10px 14px; text-align: center; font-weight: 600; margin: 16px 0 0; }
+@media (max-width: 380px) { .invite { flex-direction: column; text-align: center; } }

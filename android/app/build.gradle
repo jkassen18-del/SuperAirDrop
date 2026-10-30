@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.superairdrop'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.superairdrop'
+        minSdk 29
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    sourceSets {
+        // The same web app the Node server serves, bundled into the APK.
+        main.assets.srcDirs += ['../../public']
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

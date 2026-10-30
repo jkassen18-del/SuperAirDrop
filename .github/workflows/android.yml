@@ -1,0 +1,61 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit and server tests
+        run: npm test
+
+      - name: Check QR codes decode with a real scanner
+        run: |
+          pip install --quiet zxing-cpp numpy
+          python test/qr_decode.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build APK
+        run: gradle -p android assembleRelease --no-daemon
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk SuperAirDrop.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuperAirDrop-apk
+          path: SuperAirDrop.apk
+
+      # A stable download link: https://github.com/<owner>/<repo>/releases/download/apk-latest/SuperAirDrop.apk
+      - name: Publish to the "apk-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest SuperAirDrop.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "SuperAirDrop APK (latest build)" \
+            --notes "Built from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Open this page on your Samsung, tap SuperAirDrop.apk, and allow installing from your browser."
