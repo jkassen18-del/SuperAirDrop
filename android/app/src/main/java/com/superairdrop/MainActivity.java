@@ -2,13 +2,10 @@ package com.superairdrop;
 
 import android.app.Activity;
 import android.content.ClipData;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -20,17 +17,12 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends Activity {
     private static final int PICK_FILES = 1;
@@ -157,10 +149,6 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
-        private final AtomicInteger nextId = new AtomicInteger(1);
-        private final Map<Integer, Uri> saving = new ConcurrentHashMap<>();
-        private final Map<Integer, OutputStream> streams = new ConcurrentHashMap<>();
-
         @JavascriptInterface
         public String getShareUrl() {
             String ip = localAddress();
@@ -176,61 +164,6 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void clearSharedFiles() {
             server.setShared(new ArrayList<>());
-        }
-
-        /** Saving to the Downloads folder in pieces (the WebView cannot download blob: URLs). */
-        @JavascriptInterface
-        public int beginSave(String name, String type) {
-            try {
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                values.put(MediaStore.MediaColumns.MIME_TYPE, type == null || type.isEmpty() ? "application/octet-stream" : type);
-                values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SuperAirDrop");
-                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (uri == null) return -1;
-                OutputStream out = getContentResolver().openOutputStream(uri);
-                if (out == null) return -1;
-                int id = nextId.getAndIncrement();
-                saving.put(id, uri);
-                streams.put(id, out);
-                return id;
-            } catch (Exception e) {
-                return -1;
-            }
-        }
-
-        @JavascriptInterface
-        public boolean appendSave(int id, String base64) {
-            OutputStream out = streams.get(id);
-            if (out == null) return false;
-            try {
-                out.write(Base64.getDecoder().decode(base64));
-                return true;
-            } catch (Exception e) {
-                return false;
-            }
-        }
-
-        @JavascriptInterface
-        public boolean finishSave(int id, boolean ok) {
-            OutputStream out = streams.remove(id);
-            Uri uri = saving.remove(id);
-            if (out == null || uri == null) return false;
-            try {
-                out.close();
-                if (!ok) {
-                    getContentResolver().delete(uri, null, null);
-                    return false;
-                }
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(uri, values, null, null);
-                return true;
-            } catch (Exception e) {
-                getContentResolver().delete(uri, null, null);
-                return false;
-            }
         }
     }
 }

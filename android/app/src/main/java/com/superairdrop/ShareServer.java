@@ -1,8 +1,11 @@
 package com.superairdrop;
 
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.res.AssetManager;
 import android.net.Uri;
+import android.os.Environment;
+import android.provider.MediaStore;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -16,6 +19,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -133,7 +137,9 @@ public class ShareServer {
                 upgrade(socket, in, out, headers);
                 return;
             }
-            if (path.startsWith("/shared/")) {
+            if (request[0].equals("POST") && path.equals("/save")) {
+                saveToDownloads(socket, in, out, headers);
+            } else if (path.startsWith("/shared/")) {
                 serveShared(socket, out, path);
             } else {
                 serveAsset(out, path);
@@ -188,6 +194,64 @@ public class ShareServer {
         } catch (FileNotFoundException e) {
             writeStatus(out, "404 Not Found");
         }
+    }
+
+    /**
+     * Streams a received file from this phone's own web view straight into
+     * Downloads/SuperAirDrop. Only accepted from this phone (loopback).
+     */
+    private void saveToDownloads(Socket socket, InputStream in, OutputStream out, Map<String, String> headers) throws IOException {
+        long length;
+        try {
+            length = Long.parseLong(headers.getOrDefault("content-length", "-1"));
+        } catch (NumberFormatException e) {
+            length = -1;
+        }
+        if (!socket.getInetAddress().isLoopbackAddress() || length < 0) {
+            writeStatus(out, "403 Forbidden");
+            return;
+        }
+        String name = "file";
+        try {
+            name = URLDecoder.decode(headers.getOrDefault("x-file-name", "file"), "UTF-8").replaceAll("[/\\\\\\u0000-\\u001f]", "_");
+        } catch (Exception ignored) {
+        }
+        String type = headers.getOrDefault("content-type", "application/octet-stream");
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, type);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SuperAirDrop");
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) {
+            writeStatus(out, "500 Internal Server Error");
+            return;
+        }
+        boolean ok = false;
+        try (OutputStream dest = resolver.openOutputStream(uri)) {
+            if (dest == null) throw new IOException("no output");
+            byte[] buf = new byte[256 * 1024];
+            long remaining = length;
+            while (remaining > 0) {
+                int n = in.read(buf, 0, (int) Math.min(buf.length, remaining));
+                if (n < 0) throw new IOException("closed early");
+                dest.write(buf, 0, n);
+                remaining -= n;
+            }
+            ok = true;
+        } finally {
+            if (ok) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                resolver.update(uri, done, null, null);
+            } else {
+                resolver.delete(uri, null, null);
+            }
+        }
+        byte[] body = "{\"ok\":true}".getBytes(StandardCharsets.UTF_8);
+        out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+        out.write(body);
+        out.flush();
     }
 
     private void serveShared(Socket socket, OutputStream out, String path) throws IOException {

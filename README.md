@@ -20,9 +20,16 @@ If you own a Galaxy S26, try the built-in option first. For **every other Samsun
 1. On the Samsung, download **[SuperAirDrop.apk](https://github.com/jkassen18-del/SuperAirDrop/releases/download/apk-latest/SuperAirDrop.apk)** and open it. Allow "Install unknown apps" for your browser when asked.
 2. Open SuperAirDrop. It shows a **QR code**.
 3. On the iPhone, point the **Camera** at the QR code and tap the link. Safari opens; nothing to install on the iPhone.
-4. Tap the other phone's bubble to send. Or, on the Samsung, use **Share → SuperAirDrop** from Gallery, My Files, etc., then tap the iPhone.
+4. Tap the other phone on the radar to send. Or, on the Samsung, use **Share → SuperAirDrop** from Gallery, My Files, etc., then tap the iPhone. Every transfer asks the receiver to **Accept** first.
 
-Both phones must be on the same Wi-Fi, **or** turn on the Samsung's hotspot and connect the iPhone to it (works with no router or internet). Files the Samsung receives go to `Downloads/SuperAirDrop`. On the iPhone, tap **Download** on a received file, then save it from the Downloads list in Safari / the Files app.
+Both phones must be on the same Wi-Fi, **or** turn on the Samsung's hotspot and connect the iPhone to it (works with no router or internet).
+
+- **Samsung:** files you accept are saved to `Downloads/SuperAirDrop` automatically.
+- **iPhone:** open **Received**, then tap a photo or video to open it full size and long-press → **Save to Photos**, or tap the save button to download it to Files.
+- **Original quality from iPhone:** when sending, pick **Files · original quality**. The Photos option is quicker, but iOS may convert HEIC photos and compress videos.
+- **Updating:** uninstall the old app once. Once the signing secrets below are set, later updates install over the top.
+
+**Signing secrets (one-time):** in GitHub → Settings → Secrets and variables → Actions, add `ANDROID_KEYSTORE_BASE64` (the keystore file, base64-encoded) and `ANDROID_KEYSTORE_PASSWORD`. Without them each build uses a temporary key and you must uninstall before updating.
 
 The APK is built by GitHub Actions on every push (`.github/workflows/android.yml`) and runs the whole server on the Samsung (`android/`, a Java port of `server.js`) with the same web app bundled inside.
 
@@ -31,6 +38,7 @@ The APK is built by GitHub Actions on every push (`.github/workflows/android.yml
 - **Checksummed chunks** — every 64 KB piece carries a CRC-32; corrupted pieces are thrown away and re-requested.
 - **Saved before acknowledged** — the receiver writes each piece to on-device storage (IndexedDB) *before* telling the sender it arrived.
 - **Automatic resume** — Wi-Fi drops, the phone sleeps, the page reloads, or the route switches between direct and relay: the transfer continues from the last saved piece instead of starting over or skipping data.
+- **Batched saving** — pieces are written to storage 2 MB at a time, with 8 MB in flight, about 2–3× faster than v1.
 - **Size verification** — a file appears in "Received files" only after its assembled size matches what the sender announced.
 - **Inbox keeps files** until you delete them, so a cancelled or failed "Save" never loses the file. Use **Save / Share** (iPhone: Save to Photos / Files) or **Download**.
 - **Sender waits** — if the other phone is offline, the transfer waits and starts when it comes back; the sender is warned before closing the page mid-transfer.
@@ -64,6 +72,7 @@ Tap **Pair with code** and enter the 6-digit code from the other phone. Pairings
 ```bash
 npm test           # engine (drops, corruption, disconnect, reload) + server tests
 npm run test:e2e   # two headless browsers, direct WebRTC and relay, byte-for-byte check (needs Playwright)
+node test/bench.mjs 100   # speed test with a 100 MB file
 ```
 
 | File | Role |

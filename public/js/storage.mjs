@@ -20,17 +20,23 @@ class IDBStorage {
   }
 
   static async open() {
-    const open = indexedDB.open(DB_NAME, 1);
-    open.onupgradeneeded = () => {
+    const open = indexedDB.open(DB_NAME, 2);
+    open.onupgradeneeded = (e) => {
       const db = open.result;
-      db.createObjectStore('transfers', { keyPath: 'id' });
-      db.createObjectStore('chunks');
-      db.createObjectStore('files', { keyPath: 'id' });
+      if (e.oldVersion < 1) {
+        db.createObjectStore('transfers', { keyPath: 'id' });
+        db.createObjectStore('chunks');
+        db.createObjectStore('files', { keyPath: 'id' });
+      } else {
+        // v2 stores chunks in batches; unfinished v1 transfers cannot resume.
+        open.transaction.objectStore('chunks').clear();
+        open.transaction.objectStore('transfers').clear();
+      }
     };
     const storage = new IDBStorage(await req(open));
     // Some older Safari versions cannot store Blobs; fall back to ArrayBuffers.
     try {
-      await storage.store('chunks', 'readwrite', (s) => s.put(new Blob(['x']), '__probe'));
+      await storage.store('chunks', 'readwrite', (s) => s.put({ count: 0, value: new Blob(['x']) }, '__probe'));
       storage.blobs = true;
     } catch {
       storage.blobs = false;
@@ -54,20 +60,27 @@ class IDBStorage {
   getTransfers() { return this.store('transfers', 'readonly', (s) => s.getAll()); }
   deleteTransfer(id) { return this.store('transfers', 'readwrite', (s) => s.delete(id)); }
 
-  putChunk(id, seq, data) {
-    const value = this.blobs ? new Blob([data]) : data.slice().buffer;
-    return this.store('chunks', 'readwrite', (s) => s.put(value, `${id}:${seq}`));
+  async putBatch(id, start, count, blob) {
+    const value = this.blobs ? blob : await blob.arrayBuffer();
+    return this.store('chunks', 'readwrite', (s) => s.put({ count, value }, `${id}:${start}`));
   }
 
-  async getChunk(id, seq) {
-    const v = await this.store('chunks', 'readonly', (s) => s.get(`${id}:${seq}`));
+  async getBatch(id, start) {
+    const v = await this.store('chunks', 'readonly', (s) => s.get(`${id}:${start}`));
     if (v == null) return null;
-    return v instanceof Blob ? v : new Blob([v]);
+    return { count: v.count, blob: v.value instanceof Blob ? v.value : new Blob([v.value]) };
   }
 
-  deleteChunks(id, from, to) {
+  deleteBatches(id, starts) {
     return this.store('chunks', 'readwrite', (s) => {
-      for (let seq = from; seq < to; seq++) s.delete(`${id}:${seq}`);
+      for (const start of starts) s.delete(`${id}:${start}`);
+    });
+  }
+
+  // ';' sorts right after ':', so this range is exactly this transfer's keys.
+  deleteTransferData(id) {
+    return this.store('chunks', 'readwrite', (s) => {
+      s.delete(IDBKeyRange.bound(`${id}:`, `${id};`, false, true));
     });
   }
 

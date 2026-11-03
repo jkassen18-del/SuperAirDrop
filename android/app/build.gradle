@@ -10,8 +10,8 @@ android {
         applicationId 'com.superairdrop'
         minSdk 29
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '2.0'
     }
 
     sourceSets {
@@ -19,10 +19,24 @@ android {
         main.assets.srcDirs += ['../../public']
     }
 
+    // A fixed key lets new versions install over old ones. CI writes it from
+    // the ANDROID_KEYSTORE_BASE64 secret; without it the debug key is used.
+    def releaseKey = file('../superairdrop.keystore')
+    signingConfigs {
+        release {
+            if (releaseKey.exists()) {
+                storeFile releaseKey
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: ''
+                keyAlias 'superairdrop'
+                keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: ''
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig releaseKey.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 

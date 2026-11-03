@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b84ff">
+  <meta name="theme-color" content="#F5F4F1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="SuperAirDrop">
   <title>SuperAirDrop</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -13,78 +15,152 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> SuperAirDrop</div>
-    <span id="status" class="pill">Connecting…</span>
-  </header>
-
-  <main>
-    <section class="me">
-      <p>You appear as <button id="my-name" class="link" title="Rename this device"></button></p>
-      <p class="hint">Open this page on both phones while they are on the same Wi-Fi. Tap a device to send files.</p>
-    </section>
-
-    <section id="invite" class="invite" hidden>
-      <div id="invite-qr" class="qr"></div>
+  <div class="app">
+    <header class="top">
       <div>
-        <p><b>iPhone:</b> open the Camera and point it at this code, or type this address in Safari:</p>
-        <p id="invite-url" class="invite-url"></p>
-        <p class="hint">Both phones must be on the same Wi-Fi, or connect the iPhone to this phone's hotspot.</p>
+        <h1>Nearby</h1>
+        <p class="sub">Visible as <button id="my-name" class="name-btn" aria-label="Rename this device"></button></p>
       </div>
+      <button id="invite-btn" class="round" aria-label="Show a code to connect another device" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="14.5" y="3.5" width="6" height="6" rx="1.5"/><rect x="3.5" y="14.5" width="6" height="6" rx="1.5"/><path d="M14.5 14.5h2.5v2.5M14.5 20.5h6M20.5 14.5v6"/></svg>
+      </button>
+    </header>
+
+    <p id="offline" class="offline" hidden>Reconnecting…</p>
+    <p id="shared-banner" class="shared" hidden></p>
+
+    <section class="radar" aria-label="Nearby devices">
+      <div class="ring r3"></div>
+      <div class="ring r2"></div>
+      <div class="ring r1"></div>
+      <div class="pulse"></div>
+      <div class="pulse late"></div>
+      <div class="me">
+        <div class="me-disc">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg>
+        </div>
+        <span>You</span>
+      </div>
+      <div id="peers"></div>
+      <p id="no-peers" class="looking">Looking for devices…<br><span>Open SuperAirDrop on the other device</span></p>
     </section>
 
-    <p id="shared-banner" class="banner" hidden></p>
+    <footer class="bottom">
+      <p class="tip">Tap someone to share photos and files</p>
+      <div class="bar">
+        <button id="received-btn" class="tile">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 15.5v2a2 2 0 002 2h11a2 2 0 002-2v-2"/></svg>
+          Received <span id="received-count" class="badge" hidden></span>
+        </button>
+        <button id="pair-btn" class="tile quiet">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5l5-5"/><path d="M11 6.5l1.5-1.5a3.5 3.5 0 015 5L16 11.5M13 17.5L11.5 19a3.5 3.5 0 01-5-5L8 12.5"/></svg>
+          Pair
+        </button>
+      </div>
+    </footer>
+  </div>
 
-    <section id="peers" class="peers" aria-live="polite"></section>
-    <p id="no-peers" class="empty">Looking for nearby devices…<br><span class="hint">Not on the same Wi-Fi? Use <b>Pair with code</b>.</span></p>
+  <div id="dim" class="dim" hidden></div>
 
-    <div class="actions">
-      <button id="pair" class="secondary">Pair with code</button>
+  <!-- Incoming request -->
+  <section id="sheet-offer" class="sheet" role="dialog" aria-modal="true" aria-labelledby="offer-name" hidden>
+    <div class="grab"></div>
+    <div class="who">
+      <div id="offer-avatar" class="avatar sm"></div>
+      <div>
+        <h2 id="offer-name"></h2>
+        <p id="offer-what" class="muted"></p>
+      </div>
     </div>
+    <div id="offer-files" class="tiles"></div>
+    <div id="offer-actions" class="pair-btns">
+      <button id="offer-decline" class="btn soft">Decline</button>
+      <button id="offer-accept" class="btn primary">Accept</button>
+    </div>
+    <div id="offer-progress" class="progress" hidden>
+      <div class="track"><div id="offer-bar" class="fill"></div></div>
+      <div class="progress-text"><span id="offer-done"></span><span id="offer-eta"></span></div>
+    </div>
+  </section>
 
-    <section>
-      <h2>Transfers</h2>
-      <ul id="transfers" class="list"></ul>
-      <p id="no-transfers" class="empty small">Nothing in progress.</p>
-    </section>
+  <!-- Received files -->
+  <section id="sheet-received" class="sheet tall" role="dialog" aria-modal="true" aria-labelledby="received-title" hidden>
+    <div class="grab"></div>
+    <div class="sheet-head">
+      <h2 id="received-title">Received</h2>
+      <button id="save-all" class="text-btn">Save all</button>
+    </div>
+    <ul id="inbox" class="rows"></ul>
+    <p id="no-files" class="empty">Files people send you appear here.</p>
+    <p id="inbox-note" class="note">Kept here until you remove them.</p>
+  </section>
 
-    <section>
-      <h2>Received files</h2>
-      <p class="hint">Received files are kept here until you delete them, so a failed save never loses anything.<span id="storage-warning"></span></p>
-      <div class="actions"><button id="save-all" class="secondary" hidden>Save all</button></div>
-      <ul id="inbox" class="list"></ul>
-      <p id="no-files" class="empty small">No files yet.</p>
-    </section>
-  </main>
+  <!-- Invite another device -->
+  <section id="sheet-invite" class="sheet center" role="dialog" aria-modal="true" aria-labelledby="invite-title" hidden>
+    <div class="grab"></div>
+    <h2 id="invite-title">Add a device</h2>
+    <p class="muted">Point the other phone’s Camera here</p>
+    <div id="invite-qr" class="qr"></div>
+    <p id="invite-url" class="addr"></p>
+    <p class="note">Same Wi-Fi, or join this phone’s hotspot</p>
+  </section>
 
-  <input id="file-input" type="file" multiple hidden>
-
-  <dialog id="offer-dialog">
-    <form method="dialog">
-      <h3 id="offer-title"></h3>
-      <ul id="offer-files" class="offer-files"></ul>
-      <menu>
-        <button value="decline" class="secondary">Decline</button>
-        <button value="accept" class="primary" autofocus>Accept</button>
-      </menu>
+  <!-- Pair with a code -->
+  <section id="sheet-pair" class="sheet center" role="dialog" aria-modal="true" aria-labelledby="pair-title" hidden>
+    <div class="grab"></div>
+    <h2 id="pair-title">Pair with a code</h2>
+    <p class="muted">For devices on different networks</p>
+    <p id="my-code" class="code"></p>
+    <p class="note">Enter this on the other device, or type theirs:</p>
+    <form id="pair-form" class="pair-form">
+      <label for="code-input" class="sr">Other device’s code</label>
+      <input id="code-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="off">
+      <button class="btn primary" type="submit">Pair</button>
     </form>
-  </dialog>
+  </section>
 
-  <dialog id="pair-dialog">
-    <form method="dialog">
-      <h3>Pair with code</h3>
-      <p>On the other phone, enter this code:</p>
-      <p id="my-code" class="code"></p>
-      <p>Or enter the code shown on the other phone:</p>
-      <input id="code-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autocomplete="off">
-      <menu>
-        <button value="close" class="secondary">Close</button>
-        <button value="join" class="primary">Pair</button>
-      </menu>
+  <!-- How to pick files on iPhone -->
+  <section id="sheet-pick" class="sheet" role="dialog" aria-modal="true" aria-labelledby="pick-title" hidden>
+    <div class="grab"></div>
+    <h2 id="pick-title" class="pick-title"></h2>
+    <div class="choices">
+      <button id="pick-media" class="choice">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 15.5l-4.5-4.5-7.5 8.5"/></svg>
+        <span><b>Photos &amp; videos</b><small>Quick. iPhone may convert or compress them</small></span>
+      </button>
+      <button id="pick-files" class="choice">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h6.5l4.5 4.5v11a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z"/><path d="M13.5 3.5V8h4.5"/></svg>
+        <span><b>Files · original quality</b><small>Tap Browse, or “Choose File” in the menu</small></span>
+      </button>
+    </div>
+  </section>
+
+  <!-- A transfer in progress -->
+  <section id="sheet-busy" class="sheet" role="dialog" aria-modal="true" aria-labelledby="busy-title" hidden>
+    <div class="grab"></div>
+    <h2 id="busy-title" class="pick-title"></h2>
+    <p id="busy-what" class="muted"></p>
+    <div class="pair-btns">
+      <button id="busy-cancel" class="btn soft danger">Stop sending</button>
+      <button id="busy-more" class="btn primary">Send more</button>
+    </div>
+  </section>
+
+  <!-- Rename -->
+  <section id="sheet-name" class="sheet" role="dialog" aria-modal="true" aria-labelledby="name-title" hidden>
+    <div class="grab"></div>
+    <h2 id="name-title" class="pick-title">Your name</h2>
+    <form id="name-form" class="pair-form">
+      <label for="name-input" class="sr">Device name</label>
+      <input id="name-input" maxlength="40" autocomplete="off" enterkeyhint="done">
+      <button class="btn primary" type="submit">Done</button>
     </form>
-  </dialog>
+  </section>
 
   <div id="toast" class="toast" role="status" hidden></div>
+
+  <input id="file-any" type="file" multiple hidden>
+  <input id="file-media" type="file" accept="image/*,video/*" multiple hidden>
 
   <script type="module" src="js/app.mjs"></script>
 </body>

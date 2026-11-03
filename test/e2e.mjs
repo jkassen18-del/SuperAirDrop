@@ -28,7 +28,7 @@ async function run(browser, url, { relay }) {
   const iphone = await open(IPHONE_UA);
 
   await samsung.locator('.peer', { hasText: 'iPhone' }).waitFor();
-  if (!relay) await samsung.locator('.peer', { hasText: 'Direct' }).waitFor({ timeout: 15000 });
+  if (!relay) await samsung.locator('.peer[data-direct="true"]', { hasText: 'iPhone' }).waitFor({ timeout: 15000 });
 
   const files = [
     { name: 'holiday.mp4', mimeType: 'video/mp4', buffer: randomBytes(3 * 1024 * 1024 + 17) },
@@ -38,10 +38,10 @@ async function run(browser, url, { relay }) {
   await samsung.locator('.peer', { hasText: 'iPhone' }).click();
   await (await chooser).setFiles(files);
 
-  await iphone.locator('#offer-dialog[open]').waitFor();
+  await iphone.locator('#sheet-offer:not([hidden])').waitFor();
   await iphone.getByRole('button', { name: 'Accept' }).click();
-  await samsung.getByText(/Delivered to/).waitFor({ timeout: 60000 });
-  await iphone.locator('#inbox .item').nth(1).waitFor();
+  await samsung.locator(".peer.done", { hasText: "Delivered" }).waitFor({ timeout: 60000 });
+  await iphone.locator('#sheet-received:not([hidden]) #inbox .row').nth(1).waitFor();
 
   const received = await iphone.evaluate(async () => {
     const db = await new Promise((r) => { const o = indexedDB.open('superairdrop'); o.onsuccess = () => r(o.result); });
@@ -70,15 +70,21 @@ async function runAndroid(browser, url) {
       getShareUrl: () => 'http://192.168.1.23:8642/',
       takeSharedFiles: () => JSON.stringify(shared),
       clearSharedFiles: () => { shared = []; },
-      beginSave: (name) => { saved[1] = { name, parts: [] }; return 1; },
-      appendSave: (id, data) => { saved[id].parts.push(data); return true; },
-      finishSave: (id, ok) => { saved[id].done = ok; return true; },
     };
   }, shared.toString('base64'));
+  // The Android app's native /save endpoint, which writes to Downloads.
+  const saves = [];
+  await samsungCtx.route('**/save', async (route) => {
+    const req = route.request();
+    saves.push({ name: decodeURIComponent(req.headers()['x-file-name']), body: req.postDataBuffer() });
+    await route.fulfill({ status: 200, body: '{"ok":true}' });
+  });
   const samsung = await samsungCtx.newPage();
   await samsung.goto(url);
+  await samsung.getByRole('button', { name: /connect another device/ }).click();
   await samsung.locator('#invite-qr svg').waitFor();
-  await samsung.getByText('Tap a device to send shared.jpg').waitFor();
+  await samsung.locator('#dim').click({ position: { x: 10, y: 10 } });
+  await samsung.getByText('Tap someone to send a photo').waitFor();
 
   const iphoneCtx = await browser.newContext({ userAgent: IPHONE_UA });
   const iphone = await iphoneCtx.newPage();
@@ -87,19 +93,22 @@ async function runAndroid(browser, url) {
   // Share sheet -> tap the iPhone -> sent without a file picker.
   await samsung.locator('.peer', { hasText: 'iPhone' }).click();
   await iphone.getByRole('button', { name: 'Accept' }).click();
-  await samsung.getByText(/Delivered to/).waitFor({ timeout: 30000 });
+  await samsung.locator(".peer.done", { hasText: "Delivered" }).waitFor({ timeout: 30000 });
 
-  // iPhone -> Samsung, saved through the bridge into Downloads.
+  // iPhone -> Samsung: iPhone picks "original quality", Samsung saves to
+  // Downloads automatically once it has accepted.
   const back = randomBytes(1300000);
+  await iphone.locator('#sheet-received:not([hidden])').waitFor();
+  await iphone.locator('#dim').click({ position: { x: 10, y: 10 } });
+  await iphone.locator('.peer', { hasText: 'Galaxy' }).click();
   const chooser = iphone.waitForEvent('filechooser');
-  await iphone.locator('.peer', { hasText: 'Samsung' }).click();
+  await iphone.getByRole('button', { name: /original quality/ }).click();
   await (await chooser).setFiles([{ name: 'from-iphone.mov', mimeType: 'video/quicktime', buffer: back }]);
   await samsung.getByRole('button', { name: 'Accept' }).click();
-  await samsung.getByRole('button', { name: 'Download' }).click();
-  await samsung.waitForFunction(() => window.__saved[1]?.done === true);
-  const savedB64 = await samsung.evaluate(() => window.__saved[1].parts);
-  const savedBytes = Buffer.concat(savedB64.map((p) => Buffer.from(p, 'base64')));
-  assert.equal(sha(savedBytes), sha(back), 'file saved on Android differs');
+  await samsung.waitForFunction(() => document.querySelector('#inbox .icon-btn.saved'));
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0].name, 'from-iphone.mov');
+  assert.equal(sha(saves[0].body), sha(back), 'file saved on Android differs');
   await samsung.screenshot({ path: process.env.ANDROID_SHOT || '/dev/null' }).catch(() => {});
   await samsungCtx.close();
   await iphoneCtx.close();

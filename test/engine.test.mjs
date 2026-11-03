@@ -5,8 +5,9 @@ import { TransferEngine, MemoryStorage } from '../public/js/engine.mjs';
 import { CHUNK_SIZE, crc32, decodeChunk, encodeChunk } from '../public/js/protocol.mjs';
 
 // Two engines joined by a fake link that can drop, corrupt and disconnect.
-function pair({ dropEvery = 0, corruptEvery = 0, receiverStorage = new MemoryStorage() } = {}) {
+function pair({ dropEvery = 0, corruptEvery = 0, cutAfter = 0, receiverStorage = new MemoryStorage() } = {}) {
   const link = { up: true, chunks: 0, engines: {} };
+  link.cut = new Promise((r) => (link.onCut = r));
   const deliver = (to, from, msg) => {
     if (!link.up) return;
     setImmediate(() => {
@@ -14,6 +15,12 @@ function pair({ dropEvery = 0, corruptEvery = 0, receiverStorage = new MemorySto
       const engine = link.engines[to];
       if (msg instanceof ArrayBuffer) {
         link.chunks++;
+        if (cutAfter && link.chunks === cutAfter) {
+          // Drop the connection part-way through, as Wi-Fi does.
+          link.disconnect();
+          link.onCut();
+          return;
+        }
         if (dropEvery && link.chunks % dropEvery === 0) return;
         let buf = msg;
         if (corruptEvery && link.chunks % corruptEvery === 0) {
@@ -46,7 +53,7 @@ function pair({ dropEvery = 0, corruptEvery = 0, receiverStorage = new MemorySto
 
 function makeFiles() {
   return [
-    new File([randomBytes(CHUNK_SIZE * 10 + 123)], 'video.mp4', { type: 'video/mp4' }),
+    new File([randomBytes(CHUNK_SIZE * 150 + 123)], 'video.mp4', { type: 'video/mp4' }),
     new File([], 'empty.txt', { type: 'text/plain' }),
     new File([randomBytes(5000)], 'photo.heic', { type: 'image/heic' }),
   ];
@@ -108,7 +115,7 @@ test('transfers several files intact', async () => {
 });
 
 test('recovers from dropped and corrupted chunks', async () => {
-  const link = pair({ dropEvery: 4, corruptEvery: 7 });
+  const link = pair({ dropEvery: 37, corruptEvery: 53 });
   link.connect();
   autoAccept(link.engines.b);
   const files = makeFiles();
@@ -118,13 +125,12 @@ test('recovers from dropped and corrupted chunks', async () => {
 });
 
 test('resumes after the connection drops mid-transfer', async () => {
-  const link = pair();
+  const link = pair({ cutAfter: 70 });
   link.connect();
   autoAccept(link.engines.b);
   const files = makeFiles();
   link.engines.a.sendFiles('b', files);
-  await waitFor(link.engines.b, (v) => v.progress > 0.3);
-  link.disconnect();
+  await link.cut;
   await new Promise((r) => setTimeout(r, 50));
   link.connect();
   await waitFor(link.engines.a, (v) => v.state === 'done');
@@ -133,13 +139,13 @@ test('resumes after the connection drops mid-transfer', async () => {
 
 test('receiver page reload keeps partial data and resumes', async () => {
   const storage = new MemoryStorage();
-  const link = pair({ receiverStorage: storage });
+  const link = pair({ receiverStorage: storage, cutAfter: 80 });
   link.connect();
   autoAccept(link.engines.b);
   const files = makeFiles();
   link.engines.a.sendFiles('b', files);
-  const before = await waitFor(link.engines.b, (v) => v.progress > 0.4);
-  link.disconnect();
+  await link.cut;
+  await new Promise((r) => setTimeout(r, 20));
 
   // Simulate a reload: a brand new engine on the same storage.
   link.engines.b.destroy();
@@ -163,8 +169,7 @@ test('receiver page reload keeps partial data and resumes', async () => {
   };
   link.connect();
   await waitFor(link.engines.a, (v) => v.state === 'done');
-  assert.ok(resumedFrom[0] > 0, 'should resume from the middle, not from zero');
-  assert.ok(before.progress > 0);
+  assert.ok(resumedFrom[0] > 0, `should resume from the middle, not from zero (${resumedFrom})`);
   await assertReceived(storage, files);
 });
 
@@ -175,6 +180,21 @@ test('sender waits for an offline peer and offers when it appears', async () => 
   const files = makeFiles().slice(2);
   const id = link.engines.a.sendFiles('b', files);
   assert.equal(link.engines.a.outgoing.get(id).state, 'waiting');
+  link.connect();
+  await waitFor(link.engines.a, (v) => v.state === 'done');
+  await assertReceived(link.engines.b.storage, files);
+});
+
+test('sender finishes even when the final "done" message is lost', async () => {
+  const link = pair();
+  link.connect();
+  autoAccept(link.engines.b);
+  const files = makeFiles().slice(2);
+  link.engines.b.on('update', (v) => {
+    if (v.state === 'done') link.disconnect();
+  });
+  link.engines.a.sendFiles('b', files);
+  await new Promise((r) => setTimeout(r, 100));
   link.connect();
   await waitFor(link.engines.a, (v) => v.state === 'done');
   await assertReceived(link.engines.b.storage, files);
