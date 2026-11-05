@@ -1,6 +1,6 @@
 # SuperAirDrop
 
-AirDrop-style file sharing between **Samsung / Android phones and iPhones**, built so files are **never silently lost**. It runs in the phone's browser (Samsung Internet, Chrome, Safari) — nothing to install on either phone.
+AirDrop-style file sharing between **Samsung / Android phones and iPhones**, built so files are **never silently lost**. It runs in the phone's browser (Samsung Internet, Chrome, Safari), nothing to install on either phone.
 
 ## Can a Samsung just use real AirDrop?
 
